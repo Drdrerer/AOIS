@@ -230,16 +230,14 @@ class FloatIEEE754:
         
         res_s = s1 ^ s2
         res_e = e1 - e2 + 127 
-       
-        q = (m1 * (2**24)) // m2
+
+        q = (m1 << 23) // m2
         
-        if q >= (2**24):
-            res_m = q // 2
-            res_e += 1
-        else:
-            res_m = q
+        if q < (1 << 23):
+            q = (m1 << 24) // m2
+            res_e -= 1
             
-        return cls._pack(res_s, res_e, res_m)
+        return cls._pack(res_s, res_e, q)
 
 class BCD2421:
     TABLE = {0:[0,0,0,0], 1:[0,0,0,1], 2:[0,0,1,0], 3:[0,0,1,1], 4:[0,1,0,0],
