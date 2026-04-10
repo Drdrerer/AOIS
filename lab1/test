@@ -1,0 +1,106 @@
+import unittest
+from io import StringIO
+from unittest.mock import patch
+from work import BitUtils, IntRepresenter, IntegerALU, FloatIEEE754, BCD2421, AppInterface
+
+class TestBitUtils(unittest.TestCase):
+    def test_add_raw(self):
+        self.assertEqual(BitUtils.add_raw([0, 1], [0, 1]), [1, 0])
+        self.assertEqual(BitUtils.add_raw([1, 1], [0, 1]), [0, 0])
+
+    def test_invert(self):
+        self.assertEqual(BitUtils.invert([1, 0, 1, 1]), [1, 1, 0, 0])
+        self.assertEqual(BitUtils.invert([0, 1, 1, 0]), [0, 0, 0, 1])
+
+class TestIntRepresenter(unittest.TestCase):
+    def setUp(self):
+        self.repr = IntRepresenter(32)
+
+    def test_to_direct(self):
+        self.assertEqual(self.repr.to_direct(5)[-3:], [1, 0, 1])
+        self.assertEqual(self.repr.to_direct(-5)[0], 1)
+
+    def test_to_complement(self):
+        self.assertEqual(self.repr.to_complement(5)[-3:], [1, 0, 1])
+        bits = self.repr.to_complement(-10)
+        self.assertEqual(self.repr.bits_to_int(bits), -10)
+        self.assertEqual(self.repr.bits_to_int(self.repr.to_complement(10)), 10)
+
+class TestIntegerALU(unittest.TestCase):
+    def setUp(self):
+        self.alu = IntegerALU(32)
+
+    def test_arithmetic_int(self):
+        self.assertEqual(self.alu.repr.bits_to_int(self.alu.add(10, -5)), 5)
+        self.assertEqual(self.alu.repr.bits_to_int(self.alu.sub(-10, 5)), -15)
+        self.assertEqual(self.alu.repr.bits_to_int(self.alu.multiply(-3, -4), False), 12)
+        self.assertEqual(self.alu.repr.bits_to_int(self.alu.multiply(-3, 4), False), -12)
+        
+        _, _, val = self.alu.divide(-7, 2)
+        self.assertEqual(val, -3.5)
+        with self.assertRaises(ValueError):
+            self.alu.divide(10, 0)
+
+class TestFloatIEEE754(unittest.TestCase):
+    def test_conversions(self):
+        bits = FloatIEEE754.to_ieee_bits(15.625)
+        self.assertEqual(FloatIEEE754.to_float(bits), 15.625)
+        self.assertEqual(FloatIEEE754.to_float([0]*32), 0.0)
+        self.assertEqual(FloatIEEE754.to_float(FloatIEEE754.to_ieee_bits(-1.5)), -1.5)
+
+    def test_arithmetic_float(self):
+        a_b = FloatIEEE754.to_ieee_bits(10.5)
+        b_b = FloatIEEE754.to_ieee_bits(2.25)
+        
+        self.assertAlmostEqual(FloatIEEE754.to_float(FloatIEEE754.add_sub(a_b, b_b)), 12.75)
+        self.assertAlmostEqual(FloatIEEE754.to_float(FloatIEEE754.add_sub(a_b, b_b, True)), 8.25)
+        self.assertAlmostEqual(FloatIEEE754.to_float(FloatIEEE754.multiply(a_b, b_b)), 23.625)
+        self.assertAlmostEqual(FloatIEEE754.to_float(FloatIEEE754.divide(a_b, b_b)), 4.6666666, places=6)
+
+    def test_float_branches(self):
+        a = FloatIEEE754.to_ieee_bits(1.0)
+        b = FloatIEEE754.to_ieee_bits(100.0)
+        self.assertAlmostEqual(FloatIEEE754.to_float(FloatIEEE754.add_sub(a, b)), 101.0)
+        
+        v = FloatIEEE754.to_ieee_bits(5.0)
+        self.assertEqual(FloatIEEE754.to_float(FloatIEEE754.add_sub(v, v, True)), 0.0)
+        
+        zero = [0]*32
+        self.assertEqual(FloatIEEE754.to_float(FloatIEEE754.multiply(v, zero)), 0.0)
+
+class TestBCD2421(unittest.TestCase):
+    def test_bcd_logic(self):
+        enc = BCD2421.encode(123)
+        self.assertEqual(BCD2421.decode(enc), 123)
+        self.assertEqual(BCD2421.decode(BCD2421.add(5, 6)), 11)
+        self.assertEqual(BCD2421.decode(BCD2421.add(99, 1)), 100)
+
+class TestInterface(unittest.TestCase):
+    @patch('builtins.input', side_effect=[
+        '1', '10',              
+        '1', '-10',             
+        '2', '10', '5',         
+        '3', '3', '4',          
+        '4', '7', '2',          
+        '5', '1.0', '2.0', '+', 
+        '5', '1.0', '2.0', '-', 
+        '5', '2.0', '1.0', '-', 
+        '5', '1.0', '2.0', '*', 
+        '5', '1.0', '2.0', '/',
+        '5', '1.0', '2.0', '!',
+        '6', '5', '6',          
+        '0'                    
+    ])
+    def test_interface_and_errors(self, mock_input):
+        app = AppInterface()
+        with patch('sys.stdout', new=StringIO()):
+            app.run()
+            
+    @patch('builtins.input', side_effect=['4', '10', '0', '0']) 
+    def test_interface_div_zero(self, mock_input):
+        app = AppInterface()
+        with patch('sys.stdout', new=StringIO()):
+            app.run()
+
+if __name__ == '__main__':
+    unittest.main()
