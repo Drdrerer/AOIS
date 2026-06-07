@@ -222,6 +222,35 @@ def print_karnaugh_map(vars_list, outputs):
             vals.append(f" {outputs[idx]} ")
         print("    " + row_str + " | ".join(vals))
 
+def solve_coverage_table(pi_keys, target_indices, pi_dict, vars_list, is_cnf):
+    """
+    Анализирует таблицу покрытия и возвращает список выбранных импликант.
+    """
+    matrix = {pi: set(pi_dict[pi]) for pi in pi_keys}
+    uncovered = set(target_indices)
+    selected_pis = []
+    
+    while uncovered:
+        col_map = {col: [] for col in uncovered}
+        for pi, cols in matrix.items():
+            for col in cols:
+                if col in col_map:
+                    col_map[col].append(pi)
+        
+        essential = None
+        for col, pis in col_map.items():
+            if len(pis) == 1:
+                essential = pis[0]
+                break
+        
+        target_pi = essential if essential else max(matrix, key=lambda pi: len(matrix[pi] & uncovered))
+        
+        selected_pis.append(target_pi)
+        uncovered -= matrix[target_pi]
+        matrix.pop(target_pi)
+        
+    return selected_pis
+
 def main():
     print("=== Лабораторная работа №2 ===")
     user_expr = input("Введите логическую функцию (например, !(!a->!b) | c): ").strip()
@@ -405,6 +434,16 @@ def main():
     print_coverage_table(pi_dnf, ones_indices, pi_dict_dnf, found_vars, is_cnf=False)
     print("\n   Таблица покрытия для КНФ:")
     print_coverage_table(pi_cnf, zeros_indices, pi_dict_cnf, found_vars, is_cnf=True)
+
+    chosen_pis_dnf = solve_coverage_table(pi_dnf, ones_indices, pi_dict_dnf, found_vars, is_cnf=False)
+    chosen_pis_cnf = solve_coverage_table(pi_cnf, zeros_indices, pi_dict_cnf, found_vars, is_cnf=True)
+
+    min_dnf_str = " ∨ ".join(term_to_str(pi, found_vars, is_cnf=False) for pi in chosen_pis_dnf)
+    min_cnf_str = " & ".join(term_to_str(pi, found_vars, is_cnf=True) for pi in chosen_pis_cnf)
+
+    print("\n--- Итоговый ответ (Таблично-расчетный метод) ---")
+    print(f"МДНФ = {min_dnf_str}")
+    print(f"МКНФ = {min_cnf_str}")
 
     print("\n12) Минимизация табличным методом (Карта Карно):")
     print_karnaugh_map(found_vars, outputs)
